@@ -38,7 +38,17 @@ class Concert {
     }
     static async getNextConcert() {
         try {
-            let time = new Date().getHours;
+            let time = new Date().getHours();
+            let list = concertsData.concerts;
+            for (let concert_list of list){
+                let hours = concert_list.time.split(':')[0];
+                if(hours > time){
+                    delete concert_list["id"];
+                    return { status: 200, result: {concert:concert_list}};
+                }
+            }
+            return { status: 400, result: {msg:"No next concert"}};
+            
             
         } catch (err) {
             console.log(err);

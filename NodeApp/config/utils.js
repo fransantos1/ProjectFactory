@@ -7,3 +7,9 @@ module.exports.genToken = function genToken(length) {
    }
    return token;
 }
+module.exports.normalizeMAC =function normalizeMAC(mac) {
+    // Remove non-hex characters and convert to lowercase
+    const normalizedMAC = mac.toLowerCase().replace(/[^0-9a-f]/g, '');
+    // Insert colons every two characters
+    return normalizedMAC.replace(/(.{2})(?=.)/g, '$1:');
+}

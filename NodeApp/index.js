@@ -7,13 +7,6 @@ var morgan = require('morgan');
 
 
 var app = express();
-app.use(cookieSession({
-  name: 'session',
-  secret: process.env.COOKIE_SECRET,
-  // Cookie Options
-  maxAge: 6 * 60 * 60 * 1000 // 6 hours
-}))
-
 app.use(morgan('dev'));
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
@@ -25,7 +18,10 @@ app.use("/api/users",usersRouter);
 const concertRouter = require("./routes/concertRoutes");
 app.use("/api/concerts",concertRouter);
 
-// when we don't find anything
+const nodeRouter = require("./routes/nodeRoutes");
+app.use("/api/node",nodeRouter);
+
+
 app.use((req, res, next) => {
   res.status(404).send({msg:"No resource or page found."});
 })
