@@ -76,10 +76,11 @@ def genmac():
 
 n_data = 120
 
-n_nodes = 40
+n_nodes = 20
 height = 10
 width = 10
 search_radius = 4
+epochInteval = 60  #in seconds
 
 map = [[None for _ in range(width)] for _ in range(height)]
 for i in range(height):
@@ -98,6 +99,7 @@ def get_neighboring_values(i, j):
     return neighbors
 
 
+closestConnections = {}
 def getNeighbor():
     for i in range(height):
         for j in range(width):
@@ -195,9 +197,9 @@ for i in range(n_nodes):
 getNeighbor()
 
 
-tempEpoch = epochInitial - 60
+tempEpoch = epochInitial - epochInteval
 for l in range(n_data):
-    tempEpoch = tempEpoch + 60
+    tempEpoch = tempEpoch + epochInteval
     gentemp()
     for i in range(height):
         for j in range(width):

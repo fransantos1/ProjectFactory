@@ -22,9 +22,9 @@ router.post('/connections',auth.NodeAuth,async function (req, res, next) {
         res.status(500).send(err);
     }
 });
-router.get('/connections',auth.ApiKey,async function (req, res, next) {
+router.get('/mesh',auth.ApiKey,async function (req, res, next) {
     try {
-        let result = await node.getConn();
+        let result = await node.SendMesh();
         res.status(result.status).send({result: result.result.connections});  
     } catch (err) {
         console.log(err);

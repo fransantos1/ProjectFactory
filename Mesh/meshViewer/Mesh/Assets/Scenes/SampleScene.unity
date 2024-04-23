@@ -865,8 +865,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   prefab: {fileID: 1032645267964293540, guid: 0632fbd09d6f4644488830b06c039c91, type: 3}
   desiredDistance: 5
-  repulsiveForce: 1000
-  atractionForce: 1
+  repulsiveForce: 5
+  atractionForce: 10
 --- !u!4 &1882889078
 Transform:
   m_ObjectHideFlags: 0

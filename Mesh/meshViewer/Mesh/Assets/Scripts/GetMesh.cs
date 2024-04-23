@@ -12,7 +12,7 @@ public class GetMesh
 
     public IEnumerator ApiGetMesh(Action<string> callback)
     {
-        using (UnityWebRequest req = UnityWebRequest.Get(proxyAddress + "/api/node/connections"))
+        using (UnityWebRequest req = UnityWebRequest.Get(proxyAddress + "/api/node/mesh"))
             
         {
             req.SetRequestHeader("api_key", ApiKey);

@@ -7,8 +7,8 @@ create table node (
 
 create table data(
     data_id SERIAL not null,
-    data_temperature DECIMAL,
-    data_Humidity DECIMAL,
+    data_value DECIMAL,
+    data_dataType_id int not null,
     data_time timestamp,
     data_node_id int not null,
     primary key(data_id)
@@ -16,6 +16,22 @@ create table data(
 alter table data add constraint node_fk_data
 foreign key (data_node_id) references node(node_id) 
 ON DELETE NO ACTION ON UPDATE NO ACTION;
+
+
+create table dataType(
+    dataType_id SERIAL not null,
+    dataType_name VARCHAR(255),
+    primary key(dataType_id)
+);
+INSERT INTO dataType (dataType_name) VALUES ('temperature');
+INSERT INTO dataType (dataType_name) VALUES ('humidity');
+
+alter table data add constraint data_fk_dataType
+foreign key (data_dataType_id) references dataType(dataType_id) 
+ON DELETE NO ACTION ON UPDATE NO ACTION;
+
+
+
 
 create table nodeConnection (
     nodeConnection_id SERIAL not null,

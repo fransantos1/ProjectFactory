@@ -2,7 +2,12 @@ const bcrypt = require('bcrypt');
 const pool = require("../config/database");
 const auth = require("../config/utils");
 const utils = require("../config/utils");
-const saltRounds = 10; 
+const saltRounds = 10;
+
+//! FIX THIS
+const temperature_id = 1; 
+const humidity_id = 2;
+
 
 class Node {
     constructor() {
@@ -10,16 +15,22 @@ class Node {
     }
     export() {
     }
-
     static async saveData(node, datas) {
         try {
+            /*    data_value DECIMAL,
+                data_dataType_id DECIMAL, 
+                */
             //if data is sensor data
             for (let data of datas) {
                 let date = new Date(data.timestamp * 1000); // Convert seconds to milliseconds
                 let dbResult = await pool.query(`
-                INSERT INTO data (data_temperature, data_Humidity, data_time, data_node_id)
+                INSERT INTO data (data_value, data_dataType_id, data_time, data_node_id)
                 VALUES ($1, $2,$3,$4) RETURNING data_id`,
-                [data.temperature, data.humidity, date,node.node_id]);
+                [data.temperature, temperature_id, date,node.node_id]);
+                dbResult = await pool.query(`
+                INSERT INTO data (data_value, data_dataType_id, data_time, data_node_id)
+                VALUES ($1, $2,$3,$4) RETURNING data_id`,
+                [data.humidity, humidity_id, date,node.node_id]);
                 let data_id = dbResult.rows[0].data_id;
             }
             //if data is connections data
@@ -70,18 +81,58 @@ class Node {
         }
 
     }
-    static async getConn(){
+    static async SendMeshData(data_type, interval){
+        /*
+        SELECT  d.data_node_id, data_value
+        FROM data d
+        JOIN (
+            SELECT data_node_id, MAX(data_time) AS max_time
+            FROM data
+            WHERE data_time <= to_timestamp(1704067200+10)
+            GROUP BY data_node_id
+        ) AS sub
+        ON d.data_node_id = sub.data_node_id AND d.data_time = sub.max_time
+        where d.data_dataType_id =1
+        will return:
+        data :[
+            {
+                id: node_id,
+                data: data_id
+            }
+        ]
+         
+         */
+        
+    }
+    static async SendMesh(){
         try{
+            let data = ["temperature", "humidity"];
+            let interval = 60 //in seconds, forcing interval because it will make it easier
             let connections = {nodes:[]}
+            let mesh ={};
             //will return something like:
             /*
-                {[{id:id, conn:[]},{id:id, conn:[]},{id:id, conn:[]}
 
-                ]}
+                mesh :{
+                    beginning: beginning_date,
+                    end: end_date,
+                    interval: data_interval,
+                    data_types: [
+                        temperature, humidity, ...
+                    ],
+                    nodes: [{
+                        id: id,
+                        conn:[],
+                        state: node_state,
+                        n_occupants: n_occupants,
+                        },{...}
+                    ]
+                }
             */
-            //get all nodes id
+
+            //get all nodes id of nodes that have connections
             let dbResult = await pool.query(`
-                select node_id from node 
+                select * from node 
                 where
                 EXISTS(
                     select * 
@@ -91,6 +142,7 @@ class Node {
                 )`);
             let nodes = dbResult.rows
             //foreach node onde nodes
+
             for(let node of nodes){
                 let insert = {"id":node.node_id}
                 //get all associated connections
@@ -101,13 +153,31 @@ class Node {
                 insert.connections = rows
                 connections.nodes.push(insert)
             }
+            //get min and max date
+            dbResult = await pool.query(`select min(data_time) as beginning, max(data_time) as end from data`);
+            //if(dbResult.rows.length)
+            mesh.beginning = dbResult.rows[0].beginning;
+            mesh.end = dbResult.rows[0].end;
+
+            dbResult = await pool.query(`select min(data_time) as beginning, max(data_time) as end from data`);
+
+
+            
             return { status: 200, result: { connections} };
         }catch(err){
             console.log(err);
             return { status: 500};
         }
-
     }
+    /*
+    SELECT 
+        MIN(EXTRACT(EPOCH FROM (t1.data_time - t2.data_time))) AS min_time_difference
+    FROM 
+        data t1
+    JOIN 
+        data t2 ON t1.data_node_id = t2.data_node_id AND t1.data_time > t2.data_time;
+
+     */
     static async RegisterNode(MACAddress) {
         try {
             if(!MACAddress)
@@ -177,6 +247,7 @@ class Node {
             return { status: 500};
         }
     }
+    //Send desired interval between data saves
     static async AuthNode(macaddress, token){
         try {
             macaddress = utils.normalizeMAC(macaddress);
