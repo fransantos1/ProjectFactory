@@ -2,6 +2,8 @@ create table node (
     node_id SERIAL not null,
     node_MACAddress macaddr not null,
     node_token VARCHAR(255), 
+    node_apiToken VARCHAR(255) not null,
+    node_ip inet not null,
     primary key (node_id)
 );
 

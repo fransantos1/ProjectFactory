@@ -2,6 +2,8 @@ import random
 import requests
 import json
 import datetime
+import random
+import string
 apiKey = "134a8fb6-3824-497a-a23c-1b89abe03a8a"
 epochInitial = 1704067200
 server = "http://localhost:8080/"
@@ -25,11 +27,13 @@ class colors:
     RED = '\033[91m'
     RESET = '\033[0m' 
 
-def authenthicate(mac):
+def authenthicate(mac, token,ip):
     try:
         custom_headers = {
+            "ApiToken" :token,
             "macaddress": mac,
-            "api_key": apiKey
+            "api_key": apiKey,
+            "ip":ip
         }
         response = requests.get(server+"api/node/authenticate",headers=custom_headers)
         if response.status_code == 200:
@@ -73,13 +77,21 @@ def genmac():
     mac_address = ':'.join(''.join(mac_digits[i:i+2]) for i in range(0, 12, 2))
     return mac_address
 
+def gen_token(length):
+    characters = string.ascii_letters + string.digits
+    token = ''.join(random.choice(characters) for _ in range(length))
+    return token
+def gen_ip():
+    ip = '.'.join(str(random.randint(0, 255)) for _ in range(4))
+    return ip
+
 
 n_data = 120
 
-n_nodes = 20
-height = 10
+n_nodes = 1
+height = 10  
 width = 10
-search_radius = 4
+search_radius = 2
 epochInteval = 60  #in seconds
 
 map = [[None for _ in range(width)] for _ in range(height)]
@@ -190,7 +202,7 @@ for i in range(n_nodes):
         y = random.randint(0,width-1)
         if map[x][y].node is None:
             node = Node(genmac())
-            token = authenthicate(node.macaddress)
+            token = authenthicate(node.macaddress, gen_token(15), gen_ip())
             node.token = token
             map[x][y].node = node
             break

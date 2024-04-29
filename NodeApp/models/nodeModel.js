@@ -3,15 +3,28 @@ const pool = require("../config/database");
 const auth = require("../config/utils");
 const utils = require("../config/utils");
 const saltRounds = 10;
-
+const nodeApi_port = 80;
 //! FIX THIS
 const temperature_id = 1; 
 const humidity_id = 2;
 
+function dbNodetoNode(dbnode)  {
+    let node = new Node();
+    node.id = dbnode.node_id;
+    node.token = dbnode.node_token;
+    node.apiToken = dbnode.node_apitoken;
+    node.ip = dbnode.node_ip;
+    node.macaddress = dbnode.node_macaddress;
+    return node;
+}
 
 class Node {
-    constructor() {
-
+    constructor(id, token, apiToken, ip,macaddress) {
+        this.id = id
+        this.token = token
+        this.apiToken = apiToken
+        this.ip = ip
+        this.macaddress = macaddress
     }
     export() {
     }
@@ -21,16 +34,17 @@ class Node {
                 data_dataType_id DECIMAL, 
                 */
             //if data is sensor data
+            console.log(node);
             for (let data of datas) {
                 let date = new Date(data.timestamp * 1000); // Convert seconds to milliseconds
                 let dbResult = await pool.query(`
                 INSERT INTO data (data_value, data_dataType_id, data_time, data_node_id)
                 VALUES ($1, $2,$3,$4) RETURNING data_id`,
-                [data.temperature, temperature_id, date,node.node_id]);
+                [data.temperature, temperature_id, date,node.id]);
                 dbResult = await pool.query(`
                 INSERT INTO data (data_value, data_dataType_id, data_time, data_node_id)
                 VALUES ($1, $2,$3,$4) RETURNING data_id`,
-                [data.humidity, humidity_id, date,node.node_id]);
+                [data.humidity, humidity_id, date,node.id]);
                 let data_id = dbResult.rows[0].data_id;
             }
             //if data is connections data
@@ -81,6 +95,78 @@ class Node {
         }
 
     }
+    //! Experimental way to controll led
+    static async ControlLed(value, macaddress, activate){
+                /*
+        value :{
+            r:  ,
+            g:  ,
+            b:  ,
+        }
+
+        */     
+        macaddress = utils.normalizeMAC(macaddress);
+        let result = await this.getNodeByMAC(macaddress);
+        if(result.status != 200){
+            return { status: 404, result: { msg: "no node Found" } };
+        }
+        let node = result.result.node;
+
+        (async () => {
+            try {
+                const data = {
+                    token: node.apiToken,
+                    value: value,
+                    activate: activate};
+                    console.log(data.value);
+        
+                    result = await fetch('http://' + node.ip + ':' + nodeApi_port + '/setLed', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(data)
+                });
+
+            } catch (err) {
+                console.error(err.message);
+            }
+        })();   
+        if(result.status !== 200){
+            return { status: 500};
+        }
+        return { status: 200 };
+    }
+    static async LedShow_node(){
+        /*
+        send node:
+        {
+            token: apiToken,
+            value: [
+                values:{
+                    value : {
+                                r:  ,
+                                g:  ,
+                                b:  ,
+                            }, 
+                    duration: duration(ms)}
+            ],
+            time: epoch_startTime
+        }
+        */
+    }
+    static async BlinkNode_Find(value, node){       
+    }
+    static async BlinkNode_Emergency(){
+
+    }
+
+
+
+
+
+
+
     static async SendMeshData(data_type, interval){
         /*
         SELECT  d.data_node_id, data_value
@@ -178,32 +264,41 @@ class Node {
         data t2 ON t1.data_node_id = t2.data_node_id AND t1.data_time > t2.data_time;
 
      */
-    static async RegisterNode(MACAddress) {
+    static async RegisterNode(in_node) {
         try {
-            if(!MACAddress)
+            if(!in_node.macaddress)
                 return {
                     status: 404, result: [{
                         location: "body", param: "MAc",
                         msg: "No MacAddress Provided"
                     }]
                 };
-            let dbResult = await pool.query(`Select * from node where node_macaddress = $1`,[MACAddress]);
+                if(!in_node.ip)
+                return {
+                    status: 404, result: [{
+                        location: "body", param: "MAc",
+                        msg: "No MacAddress Provided"
+                    }]
+                };
+                if(!in_node.apiToken)
+                return {
+                    status: 404, result: [{
+                        location: "body", param: "MAc",
+                        msg: "No MacAddress Provided"
+                    }]
+                };
+            let dbResult = await pool.query(`Select * from node where node_macaddress = $1`,[in_node.MACAddress]);
             if (!dbResult.rows.length){
                 //create the node
                 dbResult = await pool.query(`
-                INSERT INTO node (node_MACAddress)
-                VALUES ($1) RETURNING node_id`, [MACAddress]);
+                INSERT INTO node (node_MACAddress, node_ApiToken, node_ip)
+                VALUES ($1, $2, $3) RETURNING node_id`, [in_node.macaddress,in_node.apiToken, in_node.ip]);
             }
             dbResult = dbResult.rows[0];
             let id = dbResult.node_id;
-            //generate a token
-            let token = utils.genToken();
-            //save the token on the database
-            let node = {id : id, token: token};
-            let response = await this.saveNodeToken(node);
-            if(response.status != 200)
-                return {status: 500}
-            return { status: 200, result: { msg: "Registered successfully", token : token} };
+            let node = new Node();
+            node.id = id;
+            return { status: 200, result: { msg: "Registered successfully", node : node} };
         } catch (err) {
             console.log(err);
             return { status: 500};
@@ -212,9 +307,13 @@ class Node {
     //ID, token
     static async saveNodeToken(node) {
         try {
+            if(!node.id || !node.token)
+                return { status: 400, result: { msg: "Bad Data"}};
+            
             let dbResult =
                 await pool.query(`Update node set node_token=$1 where node_id = $2`,
                 [node.token,node.id]);
+            
             return { status: 200, result: {msg:"Token saved!"}} ;
         } catch (err) {
             console.log(err);
@@ -224,11 +323,26 @@ class Node {
     static async getNodeByToken(token) {
         try {
             let dbResult = await pool.query(`Select * from node where node_token = $1`,[token]);
-            let node = dbResult.rows[0];
-            if(!node){
+            let dbnode = dbResult.rows[0];
+            if(!dbnode){
                 return { status: 404, result: { msg: "no node Found" } };
             }
+            let node = dbNodetoNode(dbnode);
             return { status: 200, result: { msg: "Saved successfully",node:node}};
+        } catch (err) {
+            console.log(err);
+            return { status: 500};
+        }
+    }
+    static async getNodeByid(id) {
+        try {
+            let dbResult = await pool.query(`Select * from node where node_id = $1`,[id]);
+            let dbnode = dbResult.rows[0];
+            if(!dbnode){
+                return { status: 404, result: { msg: "no node Found" } };
+            }
+             
+            return { status: 200, result: { msg: "Found Node",node: dbNodetoNode(dbnode)} };
         } catch (err) {
             console.log(err);
             return { status: 500};
@@ -237,43 +351,65 @@ class Node {
     static async getNodeByMAC(macaddress) {
         try {
             let dbResult = await pool.query(`Select * from node where node_macaddress = $1`,[macaddress]);
-            let node = dbResult.rows[0];
-            if(!node){
+            let dbnode = dbResult.rows[0];
+            if(!dbnode){
                 return { status: 404, result: { msg: "no node Found" } };
             }
-            return { status: 200, result: { msg: "Found Node",node:node} };
+             
+            return { status: 200, result: { msg: "Found Node",node: dbNodetoNode(dbnode)} };
         } catch (err) {
             console.log(err);
             return { status: 500};
         }
     }
+    static async updateNodeInfo(new_node, old_node){
+        //verify apiToken, ip
+        let dbResult
+        if(new_node.apiToken != old_node.apiToken){
+            dbResult = await pool.query(`UPDATE node SET node_apiToken = $1 WHERE node_id = $2;`,[new_node.apiToken, old_node.id]);
+        }
+        if(new_node.ip != old_node.ip){
+            dbResult = await pool.query(`UPDATE node SET node_ip = $1 WHERE node_id = $2;`,[new_node.ip, old_node.id]);
+        }
+    }
     //Send desired interval between data saves
-    static async AuthNode(macaddress, token){
+    static async AuthNode(new_node){
         try {
-            macaddress = utils.normalizeMAC(macaddress);
-            if(!macaddress){
+            //in node has: macaddress, ApiToken, ip, token.
+            new_node.macaddress = utils.normalizeMAC(new_node.macaddress);
+
+            if(!new_node.macaddress || !new_node.apiToken || !new_node.ip){
                 return { status: 400, result: { msg: "Bad Data"}};
             }
-            let result = await this.getNodeByToken(token);
+
+            //find node by token
+            let result = await this.getNodeByToken(new_node.token);
             if(result.status != 404){
-                if(result.result.node.node_macaddress == macaddress){
+                if(result.result.node.macaddress == new_node.macaddress){
+                    await this.updateNodeInfo(new_node, result.result.node);
                     return { status: 200, result: { msg: "Authenthicated"}};
                 }
                 return { status: 401, result: { msg: "Access Denied"}};
             }
-            result = await this.getNodeByMAC(macaddress);
-            if(result.status == 200){
-                token = utils.genToken();
-                let node = {id : result.result.node.node_id, token: token};
-                result = await this.saveNodeToken(node);
+            result = await this.getNodeByMAC(new_node.macaddress);
+            if(result.status != 200){
+                result = await this.RegisterNode(new_node);
                 if(result.status != 200){
-                    return { status: 500, result: { msg: "error"}};
+                    return result;
                 }
             }else{
-                result = await this.RegisterNode(macaddress);
-                token = result.result.token;
-            }   
-            return { status: 200, result: { msg: "Saved successfully",token:token} };
+                await this.updateNodeInfo(new_node, result.result.node);
+            }
+            let token = utils.genToken();
+            new_node.id = result.result.node.id;
+            
+            new_node.token = token;
+            console.log(new_node);
+            result = await this.saveNodeToken(new_node);
+            if(result.status != 200){
+                return { status: 500, result: { msg: "error"}};
+            }
+        return { status: 200, result: { msg: "Saved successfully",token:token} };
         } catch (err) {
             console.log(err);
             return { status: 500};

@@ -111,18 +111,10 @@ public class NodeScript : MonoBehaviour
                 Vector2 attractionForce = attraction * direction.normalized;
                 totalForce += attractionForce;
             }
-
-
-
-            // Gravity (Optional)
-            // You can uncomment this section to implement a central gravity force
-            /*
-            Vector2 gravityForce = gravity * (centerGravity - transform.position).normalized;
-            totalForce += gravityForce;
-            */
         }
 
-        rb.velocity = totalForce;
+        rb.AddForce(totalForce, ForceMode.VelocityChange);
+        // rb.velocity = totalForce;
     }
 
 
