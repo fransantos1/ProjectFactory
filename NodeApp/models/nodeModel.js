@@ -65,7 +65,7 @@ class Node {
             //every node connection needs to be deleted before putting the new list, and the opposite also deletes, because, if a node doesnt detect the other
             //? not sure If I should delete both sides of the connection, of just the connections of the node that's inserting (or nodeconnection_node_id1 = (select node_id from node where node_macaddress = $1))
 
-            let nodeMac = utils.normalizeMAC(node.node_macaddress);
+            let nodeMac = utils.normalizeMAC(node.macaddress);
             let dbResult = await pool.query(`
                 delete from nodeconnection 
                 where nodeconnection_node_id = (select node_id from node where node_macaddress = $1)`,[nodeMac]);
@@ -83,9 +83,9 @@ class Node {
                 let result = await this.getNodeByMAC(insertMac);
                 if(result.status != 200)
                     return {status: 500}
-                let insertid = result.result.node.node_id;;
+                let insertid = result.result.node.id;;
                 dbResult = await pool.query(`INSERT INTO nodeConnection (nodeConnection_node_id, nodeConnection_node_id1) 
-                    VALUES ($1,$2);`,[node.node_id,insertid]);
+                    VALUES ($1,$2);`,[node.id,insertid]);
             }
 
             return { status: 200, result: { msg: "Inserted successfully"} };
