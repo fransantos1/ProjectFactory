@@ -14,17 +14,21 @@ function dbNodetoNode(dbnode)  {
     node.token = dbnode.node_token;
     node.apiToken = dbnode.node_apitoken;
     node.ip = dbnode.node_ip;
+    node.isEmergency = dbnode.node_isemergency;
     node.macaddress = dbnode.node_macaddress;
+    node.isOnline = dbnode.node_isOnline;
     return node;
 }
 
 class Node {
-    constructor(id, token, apiToken, ip,macaddress) {
+    constructor(id, token, apiToken, ip,macaddress, isEmergency,isOnline) {
         this.id = id
         this.token = token
         this.apiToken = apiToken
         this.ip = ip
         this.macaddress = macaddress
+        this.isEmergency = isEmergency
+        this.isOnline = isOnline
     }
     export() {
     }
@@ -34,7 +38,7 @@ class Node {
                 data_dataType_id DECIMAL, 
                 */
             //if data is sensor data
-            console.log(node);
+
             for (let data of datas) {
                 let date = new Date(data.timestamp * 1000); // Convert seconds to milliseconds
                 let dbResult = await pool.query(`
@@ -95,6 +99,8 @@ class Node {
         }
 
     }
+
+    
     //! Experimental way to controll led
     static async ControlLed(value, macaddress, activate){
                 /*
@@ -111,31 +117,36 @@ class Node {
             return { status: 404, result: { msg: "no node Found" } };
         }
         let node = result.result.node;
+        const data = {
+            token: node.apiToken,
+            value: value,
+            activate: activate};
+        try{
+            result = await fetch('http://' + node.ip + ':' + nodeApi_port + '/setLed', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(data)
+            });  
 
-        (async () => {
-            try {
-                const data = {
-                    token: node.apiToken,
-                    value: value,
-                    activate: activate};
-                    console.log(data.value);
-        
-                    result = await fetch('http://' + node.ip + ':' + nodeApi_port + '/setLed', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify(data)
-                });
-
-            } catch (err) {
-                console.error(err.message);
+            if (result.status === 403) { //if its not possible
+               const responseBodyJson = await result.json();
+               return { status: result.status, result: { msg: responseBodyJson.msg } };
+            } else if(result.status != 200){
+                return { status: 500};
+                // handle other status codes or successful response
+               
             }
-        })();   
-        if(result.status !== 200){
+            console.log(result.body);
+            return { status: 200 };
+
+            
+        }catch(err){
+            console.log(err);
             return { status: 500};
         }
-        return { status: 200 };
+
     }
     static async LedShow_node(){
         /*
@@ -157,15 +168,21 @@ class Node {
     }
     static async BlinkNode_Find(value, node){       
     }
-    static async BlinkNode_Emergency(){
+    static async GetEmergencyNode(){
 
     }
-
-
-
-
-
-
+    static async toggleEmergency(node,isEmergency){
+        try{
+            
+            let dbResult = await pool.query(`
+            UPDATE node SET node_isemergency = $1 WHERE node_id = $2`,[isEmergency,node.id]);
+            //change status of emergency on db
+            return { status: 200, result: { msg:"success"} };
+        }catch(err){
+            console.log(err);
+            return { status: 500};
+        }
+    }
 
     static async SendMeshData(data_type, interval){
         /*

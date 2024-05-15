@@ -18,6 +18,7 @@
 #define PIN_RED 17
 #define PIN_GREEN 16
 #define PIN_BLUE 2
+#define PIN_BUZZER 27
 #define PIN_BTN_EMERGENCY 26
 #define ROTARY_ENCODER_A_PIN 35
 #define ROTARY_ENCODER_B_PIN 34
@@ -25,19 +26,28 @@
 #define ROTARY_ENCODER_STEPS 2
 #define APITOKEN_LEN 64
 
+// TODO LIGHTSHOW Function
+// TODO connection detection
+// TODO screen feedback when sending data to the api
+// TODO timeout when the net is not available and try to connect every 5 s or smth
+// TODO error when connecting to the server and make the same timeout has the net
+// TODO HEARTBEAT TO API
+
+
+
 #define API_KEY "134a8fb6-3824-497a-a23c-1b89abe03a8a"
 
 String serverName = "http://192.168.1.72:8080/";
 
-const char* ssid = "MEO-52EE71";
-const char* password = "7A41701C96";
-
 //const char* ssid = "esp32wifi";
 //const char* password = "espfrancisco";
+const char* ssid = "MEO-52EE71";
+const char* password = "7A41701C6";
 char apiToken[APITOKEN_LEN + 1];
 WebServer server(80);
 //DHT SENSOR
-
+bool isEmergency = false;
+bool isAuth = false;
 
 const char* filename = "/data.bin";
 DHT dht(DHTPIN, DHTTYPE);
@@ -68,7 +78,7 @@ const char* ntpServer = "pool.ntp.org";
 unsigned long oldEpochTime;
 unsigned long epochTime;
 bool firstStart = true;
-unsigned long getTime() {
+unsigned long getTime() {/////////////////////////////////////////////////////////////AFFECTED BY CONN
   while (true) {
     unsigned long currentCpuTime = millis();
     if ((currentCpuTime - lastEpochUpdatedTime) > epochTimerDelay || firstStart) {
@@ -90,13 +100,20 @@ unsigned long getTime() {
   }
 }
 
-void setupWifi() {
+void setupWifi() {/////////////////////////////////////////////////////////////AFFECTED BY CONN
   WiFi.begin(ssid, password);
   lcd.clear();
   lcd.setCursor(0, 0);  //Set cursor to character 0 line 1
   lcd.print("Connecting");
   int n = 0;
   while (WiFi.status() != WL_CONNECTED) {
+    if(n> 10){
+      lcd.clear();
+      lcd.setCursor(2, 1);
+      lcd.print("falied to connect");
+      delay(1000);
+      return;
+    }
     delay(500);
     lcd.setCursor(n + 10, 0);
     lcd.print(".");
@@ -111,6 +128,8 @@ void setupWifi() {
   server.begin();
   delay(1000);
 }
+
+
 struct SensorData {
   unsigned long timestamp;
   float humidity;
@@ -121,7 +140,9 @@ int dataReadingDelay = 100;            // Delay between updates in miliseconds
 int dataBufferIndex = 0;
 const int dataBufferSize = 10;
 SensorData sensorDataBuffer[dataBufferSize];
-void sensorDataController() {            // soon to be universal function to save information
+
+
+void sensorDataController() {          /////////////////////////////////////////////////////////////AFFECTED BY CONN
   unsigned long currentTime = millis();  // Get the current time
   if (currentTime - lastUpdateDataTime >= dataReadingDelay) {
     lastUpdateDataTime = currentTime;
@@ -224,7 +245,26 @@ void setupSDCard() {
   uint64_t cardSize = SD.cardSize() / (1024 * 1024);
   Serial.printf("SD Card Size: %lluMB\n", cardSize);
 }
-
+//
+//---------------------------CONNECTION
+//
+void connectionHandler(){
+  int interval = 10000;
+  static unsigned long current;  
+  static unsigned long last; 
+  current = millis();
+  if (current - last > interval)
+  {
+      bool connectionStatus = (WiFi.status() == WL_CONNECTED);
+      if(!connectionStatus){
+          //NO WIFI
+      }
+      if(connectionStatus && !isAuth){
+          //NOT AUTH
+      }
+    last = current;
+  }
+}
 //
 //---------------------------AUTHENTHICATION---------------------------------------------------------------------
 //
@@ -255,7 +295,7 @@ void genApiToken() {
   }
   apiToken[APITOKEN_LEN] = '\0';
 }
-String serverAPICheckToken() {
+String serverAPICheckToken() {/////////////////////////////////////////////////////////////AFFECTED BY CONN
   HTTPClient http;
   genApiToken();
   http.begin((serverName + "api/node/authenticate").c_str());  //THIS REQUEST WILL EITHER RETURN THE NODE TOKEN OR NOTHING
@@ -293,15 +333,31 @@ String serverAPICheckToken() {
   }
   http.end();
 }
-void authenticateWithServer() {
+void authenticateWithServer() {/////////////////////////////////////////////////////////////AFFECTED BY CONN
   String token = readTokenEEPROM();
   token = "";
   String response = serverAPICheckToken();
 }
 
 //
+//---------------------------------------LedController------------------------------------
+//
+void ledController(int r, int g, int b){
+    analogWrite(PIN_RED, r);
+    analogWrite(PIN_GREEN, g);
+    analogWrite(PIN_BLUE, b);
+}
+void resetLed(){
+    analogWrite(PIN_RED, 0);
+    analogWrite(PIN_GREEN, 0);
+    analogWrite(PIN_BLUE, 0);
+}
+
+//
 //---------------------------------------NodeAPI---------------------------------------
 //
+
+
 void locate() {
 }
 void LightShow() {
@@ -314,6 +370,10 @@ void controlLed() {
   String body = server.arg("plain");
   JsonDocument doc;
   DeserializationError error = deserializeJson(doc, body);
+  if(isEmergency){
+    server.send(403, "application/json", "{ \"msg\": \"Node in Emergency Mode\" }");
+    return;
+  }
   if (error) {
     Serial.print("Failed to parse JSON: ");
     Serial.println(error.c_str());
@@ -332,35 +392,109 @@ void controlLed() {
   Serial.println(green);
   Serial.println(blue);
   if (activate) {
-    analogWrite(PIN_RED, doc["value"]["red"]);
-    analogWrite(PIN_GREEN, doc["value"]["green"]);
-    analogWrite(PIN_BLUE, doc["value"]["blue"]);
+    ledController(doc["value"]["red"], doc["value"]["green"],doc["value"]["blue"]);
   } else {
-    analogWrite(PIN_RED, 0);
-    analogWrite(PIN_GREEN, 0);
-    analogWrite(PIN_BLUE, 0);
+    resetLed();
   }
   // Respond to the client
   server.send(200, "application/json", "{}");
+  
 }
+bool isMenuChanged = true;
 ///
 ///------------------------------EMERGENCY---------------------
 ///
 
-void IRAM_ATTR emergencyController() { 
+bool emergencyChange = false;
+///////////////////////////////////////////////////////////////////////////NEEDS AUTH
+void emergencyRequeste(bool Emergency){/////////////////////////////////////////////////////////////AFFECTED BY CONN
+
+  HTTPClient http;
+  // Specify content-type header
+  http.begin(serverName + "api/node/emergency");
+  http.addHeader("Content-Type", "application/json");
+  http.addHeader("auth_token", readTokenEEPROM());
+  char payload[50];
+  sprintf(payload, "{\"isEmergency\": %s}", Emergency ? "true" : "false");
+  int httpResponseCode = http.POST(String(payload));
+
+  if (httpResponseCode > 0) {
+    Serial.print("HTTP Response code: ");
+    Serial.println(httpResponseCode);
+
+    // Print response body
+    String response = http.getString();
+    Serial.println("Response: " + response);
+  } else {
+    Serial.println("Error during POST request.");
+  }
+
+  // Close connection
+  http.end();
+}
+void emergencyController() { 
+  static int counter;
   int interval = 250;//ms
   static unsigned long button_time;  
   static unsigned long last_button_time; 
   button_time = millis();
   if (button_time - last_button_time > 250)
   {
-        Serial.println("EMERGENCY");
+        if(isEmergency){
+          counter++;
+          if(counter == 3){
+            isMenuChanged = true;
+            isEmergency =false;
+            emergencyChange= true;
+            analogWrite(PIN_BUZZER, 0);
+            resetLed();
+            counter = 0;
+          }
+        }else{
+          emergencyChange = true;
+          isEmergency = true;
+          isMenuChanged = true;
+          resetLed();
+        }
         last_button_time = button_time;
   }
-    //IRAM_ATTR  to load function faster cause its in the IRAM 
+} 
+void Emergency(){
+    
+    static bool isOn = false;
+    int interval = 500;//ms
+    static unsigned long button_time;  
+    static unsigned long last_button_time; 
+    button_time = millis();
+    if (button_time - last_button_time > interval)
+    {
+      last_button_time = button_time;
+      if(isOn){
+        analogWrite(PIN_BUZZER, 125);
+        ledController(255,0,0);
+        
+        isOn = false;
+        
+      }else{
+        isOn=true;
+        analogWrite(PIN_BUZZER, 255);
+        resetLed();
+
+      }
+       
+    }
 }
-
-
+bool emergencyHandler(){
+  if(emergencyChange){
+    emergencyChange = false;
+    emergencyRequeste(isEmergency);
+  }
+  if(isEmergency){
+      Emergency();
+      return true;
+  }
+  return false;
+}
 //
 //-----------------------------SETUP/LOOP------------------------------
 //
@@ -378,14 +512,24 @@ void setup() {
   setupSDCard();
   setupRotaryControl();
   pinMode(PIN_BTN_EMERGENCY, INPUT_PULLUP);
+  pinMode(PIN_BUZZER, OUTPUT);
   attachInterrupt(PIN_BTN_EMERGENCY, emergencyController, RISING);
 }
 void loop() {
-  sensorDataController();
+  connectionHandler();
+
   ControlMenu();
-  server.handleClient();
+  server.handleClient();/////////////////////////////////////////////////////////////AFFECTED BY CONN
+  if(emergencyHandler()){
+    return;
+  }
+
+  sensorDataController();
 }
-String httpGetRequest_Concert() {
+//
+//----------------------------------------------------GENERAL API CALLS
+//
+String httpGetRequest_Concert() {/////////////////////////////////////////////////////////////AFFECTED BY CONN
   String payload;
   if (WiFi.status() == WL_CONNECTED) {
     HTTPClient http;
@@ -415,7 +559,8 @@ String httpGetRequest_Concert() {
   const char* time = doc["concert"]["time"];
   return String(band) + " " + String(time);
 }
-void sendData(char* payload) {
+///////////////////////////////////////////////////////////////////////////NEEDS AUTH
+void sendData(char* payload) {/////////////////////////////////////////////////////////////AFFECTED BY CONN
   HTTPClient http;
 
   // Specify content-type header
@@ -455,11 +600,20 @@ void rotaryController(int minOption, int maxOption) {  //minOption, on lcd first
     lcd.print(">");
   }
 }
-bool isMenuChanged = true;
+
 int MenuIndex = 0;    // 0 = menu / 1 = temphumDisplay / 2 = ConcertDisplay
 int optionIndex = 0;  //What option is selected
 int titlePosition = 2;
 void ControlMenu() {
+  if(isEmergency){
+    if(isMenuChanged){
+      isMenuChanged = false;
+      lcd.clear();
+      lcd.setCursor(2, 1);
+      lcd.print("EMERGENCY");
+    }
+    return;
+  }
   switch (MenuIndex) {
     case 0:
       controlMainMenu();

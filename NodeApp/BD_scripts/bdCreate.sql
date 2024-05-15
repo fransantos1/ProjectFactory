@@ -3,6 +3,8 @@ create table node (
     node_MACAddress macaddr not null,
     node_token VARCHAR(255), 
     node_apiToken VARCHAR(255) not null,
+    node_isEmergency boolean DEFAULT FALSE,
+    node_isOnline boolean DEFAULT FALSE,
     node_ip inet not null,
     primary key (node_id)
 );

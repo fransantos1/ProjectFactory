@@ -22,6 +22,18 @@ router.post('/connections',auth.NodeAuth,async function (req, res, next) {
         res.status(500).send(err);
     }
 });
+router.post('/emergency',auth.NodeAuth,async function (req, res, next) {
+    try {
+        let result = await Node.toggleEmergency(req.node,req.body.isEmergency);
+        res.status(result.status).send({result: result.result});  
+    } catch (err) {
+        console.log(err);
+        res.status(500).send(err);
+    }
+});
+
+
+
 router.get('/mesh',auth.ApiKey,async function (req, res, next) {
     try {
         let result = await Node.SendMesh();
