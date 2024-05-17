@@ -102,15 +102,46 @@ class Node {
 
     
     //! Experimental way to controll led
-    static async ControlLed(value, macaddress, activate){
-                /*
-        value :{
-            r:  ,
-            g:  ,
-            b:  ,
+    static async AmbientLed(macaddress, activate){
+        macaddress = utils.normalizeMAC(macaddress);
+        let result = await this.getNodeByMAC(macaddress);
+        if(result.status != 200){
+            return { status: 404, result: { msg: "no node Found" } };
         }
+        let node = result.result.node;
+        const data = {
+            token: node.apiToken,
+            activate: activate
+        };
+        try{
+            result = await fetch('http://' + node.ip + ':' + nodeApi_port + '/setLed', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(data)
+            });  
+            const responseBodyJson = await result.json();
+            if (result.status === 403) { //if its not possible
+            
+            return { status: result.status, result: { msg: responseBodyJson.msg } };
+            } else if(result.status != 200){
+                console.log(responseBodyJson);
+                return { status: 500};
+                
+                // handle other status codes or successful response
+            
+            }
+            console.log(result.body);
+            return { status: 200 };
 
-        */     
+            
+        }catch(err){
+            console.log(err);
+            return { status: 500};
+        }
+    }
+    static async ControlLed(value, macaddress, activate){   
         macaddress = utils.normalizeMAC(macaddress);
         let result = await this.getNodeByMAC(macaddress);
         if(result.status != 200){
@@ -122,7 +153,7 @@ class Node {
             value: value,
             activate: activate};
         try{
-            result = await fetch('http://' + node.ip + ':' + nodeApi_port + '/setLed', {
+            result = await fetch('http://' + node.ip + ':' + nodeApi_port + '/setRGB', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -134,11 +165,11 @@ class Node {
                const responseBodyJson = await result.json();
                return { status: result.status, result: { msg: responseBodyJson.msg } };
             } else if(result.status != 200){
+                
                 return { status: 500};
                 // handle other status codes or successful response
                
             }
-            console.log(result.body);
             return { status: 200 };
 
             

@@ -59,6 +59,15 @@ router.get('/authenticate',auth.ApiKey, async function (req, res, next) {
 });
 router.post('/Led',auth.ApiKey,async function (req, res, next) {
     try {
+        let result = await Node.AmbientLed(req.body.macaddress, req.body.activate);
+        res.status(result.status).send({result: result.result});  
+    } catch (err) {
+        console.log(err);
+        res.status(500).send(err);
+    }
+});
+router.post('/RGB',auth.ApiKey,async function (req, res, next) {
+    try {
         let result = await Node.ControlLed(req.body.value,req.body.macaddress, req.body.activate);
         res.status(result.status).send({result: result.result});  
     } catch (err) {

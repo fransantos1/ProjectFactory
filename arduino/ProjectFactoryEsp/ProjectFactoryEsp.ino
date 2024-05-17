@@ -19,6 +19,7 @@
 #define PIN_GREEN 16
 #define PIN_BLUE 2
 #define PIN_BUZZER 27
+#define PIN_LED 14
 #define PIN_BTN_EMERGENCY 26
 #define ROTARY_ENCODER_A_PIN 35
 #define ROTARY_ENCODER_B_PIN 34
@@ -42,13 +43,13 @@ String serverName = "http://192.168.1.72:8080/";
 //const char* ssid = "esp32wifi";
 //const char* password = "espfrancisco";
 const char* ssid = "MEO-52EE71";
-const char* password = "7A41701C6";
+const char* password = "7A41701C96";
 char apiToken[APITOKEN_LEN + 1];
 WebServer server(80);
 //DHT SENSOR
 bool isEmergency = false;
-bool isAuth = false;
-
+bool isAuth = false; // auth with api
+bool isConn = false; //api available
 const char* filename = "/data.bin";
 DHT dht(DHTPIN, DHTTYPE);
 int lcdHeight = 4;
@@ -124,7 +125,9 @@ void setupWifi() {/////////////////////////////////////////////////////////////A
   lcd.print("Connected WiFi_IP: ");
   lcd.setCursor(0, 1);
   lcd.print(WiFi.localIP());
-  server.on("/setLed", HTTP_POST, controlLed);
+  server.on("/setRGB", HTTP_POST, LightShow);//RGB
+  server.on("/setLed", HTTP_POST, controlLed);//Ambient
+  //server.on("/setLed", HTTP_POST, controlLed);//other
   server.begin();
   delay(1000);
 }
@@ -141,7 +144,7 @@ int dataBufferIndex = 0;
 const int dataBufferSize = 10;
 SensorData sensorDataBuffer[dataBufferSize];
 
-
+float maxTemp = 31;
 void sensorDataController() {          /////////////////////////////////////////////////////////////AFFECTED BY CONN
   unsigned long currentTime = millis();  // Get the current time
   if (currentTime - lastUpdateDataTime >= dataReadingDelay) {
@@ -153,7 +156,7 @@ void sensorDataController() {          /////////////////////////////////////////
     if (dataBufferIndex >= dataBufferSize) {
       dataBufferIndex = 0;
       if (!SD.begin()) {
-        Serial.println("SD card not available");
+        //Serial.println("SD card not available");
         return;
       }
       writeSensorDataToFile();
@@ -190,13 +193,15 @@ void sendSensorData() {
   strcat(payload, "]");
   sendData(payload);
   delete[] payload;
-  if (SD.remove(filename)) {
-    Serial.println("File deleted successfully.");
-  } else {
-    Serial.println("Failed to delete file.");
-  }
 
-  Serial.println("It Took : " + String((millis() - stopwatch)) + " ms");
+  file = SD.open(filename, FILE_WRITE);
+  if (file) {
+    file.close(); // Closing immediately truncates the file to zero length
+    Serial.println("File emptied successfully.");
+  } else {
+    Serial.println("Failed to open file for truncating.");
+  }
+  Serial.println("It Took: " + String((millis() - stopwatch)) + " ms");
 }
 void writeSensorDataToFile() {
   static size_t lastSize;
@@ -259,7 +264,8 @@ void connectionHandler(){
       if(!connectionStatus){
           //NO WIFI
       }
-      if(connectionStatus && !isAuth){
+      if(connectionStatus && !isAuth || !isConn){
+          authenticateWithServer();
           //NOT AUTH
       }
     last = current;
@@ -325,9 +331,18 @@ String serverAPICheckToken() {//////////////////////////////////////////////////
       saveTokenEEPROM(token);
     }
     Serial.println(String(token));
+    isAuth = true;
+    isConn = true;
     return String(token);
   } else {
-    Serial.print("Error code: ");
+    Serial.print("Error code: ");//-1 couldnt connect
+    if(httpResponseCode == -1){
+      isConn = false;
+      Serial.print("coudnt access api: ");
+    }else{
+      isConn = true;
+    }
+    isAuth = false;
     Serial.println(httpResponseCode);
     return "Error";
   }
@@ -360,9 +375,9 @@ void resetLed(){
 
 void locate() {
 }
+
+//Controll RGB
 void LightShow() {
-}
-void controlLed() {
   // Send a respons
   //verifications needed
   //needs TokenAPI
@@ -388,13 +403,37 @@ void controlLed() {
   int red = doc["value"]["red"];
   int green = doc["value"]["green"];
   int blue = doc["value"]["blue"];
-  Serial.println(red);
-  Serial.println(green);
-  Serial.println(blue);
   if (activate) {
     ledController(doc["value"]["red"], doc["value"]["green"],doc["value"]["blue"]);
   } else {
     resetLed();
+  }
+  // Respond to the client
+  server.send(200, "application/json", "{}");
+  
+}
+
+
+//Controll Ambient light
+void controlLed() {
+  static bool activate;
+  String body = server.arg("plain");
+  JsonDocument doc;
+  DeserializationError error = deserializeJson(doc, body);
+  if (error) {
+    Serial.print("Failed to parse JSON: ");
+    Serial.println(error.c_str());
+  }
+  String token = doc["token"];
+  if (token.equals("null") || !token.equals(String(apiToken))) {
+    server.send(401, "application/json", "{ \"msg\": \"Not Authorized\" }");
+    return;
+  }
+  activate = doc["activate"];
+  if (activate) {
+    digitalWrite(PIN_LED, HIGH);
+  } else {
+    digitalWrite(PIN_LED, LOW);
   }
   // Respond to the client
   server.send(200, "application/json", "{}");
@@ -408,7 +447,8 @@ bool isMenuChanged = true;
 bool emergencyChange = false;
 ///////////////////////////////////////////////////////////////////////////NEEDS AUTH
 void emergencyRequeste(bool Emergency){/////////////////////////////////////////////////////////////AFFECTED BY CONN
-
+  if(!isAuth)
+    return;
   HTTPClient http;
   // Specify content-type header
   http.begin(serverName + "api/node/emergency");
@@ -432,13 +472,13 @@ void emergencyRequeste(bool Emergency){/////////////////////////////////////////
   // Close connection
   http.end();
 }
-void emergencyController() { 
+void emergencyInterrupt() { 
   static int counter;
   int interval = 250;//ms
   static unsigned long button_time;  
   static unsigned long last_button_time; 
   button_time = millis();
-  if (button_time - last_button_time > 250)
+  if (button_time - last_button_time > interval)
   {
         if(isEmergency){
           counter++;
@@ -446,21 +486,17 @@ void emergencyController() {
             isMenuChanged = true;
             isEmergency =false;
             emergencyChange= true;
-            analogWrite(PIN_BUZZER, 0);
-            resetLed();
             counter = 0;
           }
         }else{
           emergencyChange = true;
           isEmergency = true;
           isMenuChanged = true;
-          resetLed();
         }
         last_button_time = button_time;
   }
 } 
 void Emergency(){
-    
     static bool isOn = false;
     int interval = 500;//ms
     static unsigned long button_time;  
@@ -478,8 +514,7 @@ void Emergency(){
       }else{
         isOn=true;
         analogWrite(PIN_BUZZER, 255);
-        resetLed();
-
+        ledController(0,0,0);
       }
        
     }
@@ -487,6 +522,10 @@ void Emergency(){
 bool emergencyHandler(){
   if(emergencyChange){
     emergencyChange = false;
+
+    if(!isEmergency)
+      analogWrite(PIN_BUZZER, 0);
+    resetLed();
     emergencyRequeste(isEmergency);
   }
   if(isEmergency){
@@ -499,6 +538,7 @@ bool emergencyHandler(){
 //-----------------------------SETUP/LOOP------------------------------
 //
 void setup() {
+  pinMode(PIN_LED, OUTPUT);
   EEPROM.begin(EEPROM_SIZE);
   Serial.begin(115200);
   setupDisplay();
@@ -511,43 +551,46 @@ void setup() {
   setupDHTsensor();
   setupSDCard();
   setupRotaryControl();
-  pinMode(PIN_BTN_EMERGENCY, INPUT_PULLUP);
+  pinMode(PIN_BTN_EMERGENCY, INPUT);
   pinMode(PIN_BUZZER, OUTPUT);
-  attachInterrupt(PIN_BTN_EMERGENCY, emergencyController, RISING);
+  attachInterrupt(PIN_BTN_EMERGENCY, emergencyInterrupt, RISING);
 }
 void loop() {
   connectionHandler();
 
   ControlMenu();
   server.handleClient();/////////////////////////////////////////////////////////////AFFECTED BY CONN
-  if(emergencyHandler()){
+  if(emergencyHandler()){ 
     return;
   }
-
   sensorDataController();
 }
 //
 //----------------------------------------------------GENERAL API CALLS
 //
 String httpGetRequest_Concert() {/////////////////////////////////////////////////////////////AFFECTED BY CONN
+  if(!isConn)
+    return "NaN";
+
   String payload;
-  if (WiFi.status() == WL_CONNECTED) {
-    HTTPClient http;
-    String serverPath = serverName + "api/concerts/get";
-    http.begin(serverPath.c_str());
-    int httpResponseCode = http.GET();
-    if (httpResponseCode > 0) {
-      payload = http.getString();
-    } else {
-      Serial.print("Error code: ");
-      Serial.println(httpResponseCode);
-      return "Server Connection err";
-    }
-    // Free resources
-    http.end();
+  HTTPClient http;
+  String serverPath = serverName + "api/concerts/get";
+  http.begin(serverPath.c_str());
+  int httpResponseCode = http.GET();
+  if (httpResponseCode > 0) {
+    payload = http.getString();
   } else {
+    Serial.print("Error code: ");//-1 couldnt connect
+    if(httpResponseCode == -1){
+      isConn = false;
+      isAuth = false;
+    }
+    Serial.print("Error code: ");
+    Serial.println(httpResponseCode);
     return "NaN";
   }
+  http.end();
+  
   JsonDocument doc;
   DeserializationError error = deserializeJson(doc, payload);
   if (error) {
@@ -561,6 +604,11 @@ String httpGetRequest_Concert() {///////////////////////////////////////////////
 }
 ///////////////////////////////////////////////////////////////////////////NEEDS AUTH
 void sendData(char* payload) {/////////////////////////////////////////////////////////////AFFECTED BY CONN
+  lcd.clear();
+  lcd.setCursor(0, 1);
+  lcd.print("Sending");
+  if(!isAuth)
+    return;
   HTTPClient http;
 
   // Specify content-type header
@@ -579,9 +627,18 @@ void sendData(char* payload) {//////////////////////////////////////////////////
     String response = http.getString();
     Serial.println("Response: " + response);
   } else {
-    Serial.println("Error during POST request.");
+    Serial.print("Error code: ");//-1 couldnt connect
+    if(httpResponseCode == -1){
+      isConn = false;
+      isAuth = false;
+    }else if(httpResponseCode == 401){
+      isAuth = false;
+    }
+    Serial.print("coudnt access api: ");
+    Serial.println(httpResponseCode);
   }
-
+  lcd.clear();
+  isMenuChanged = true;
   // Close connection
   http.end();
 }
@@ -675,16 +732,17 @@ void controlDisplayConcert() {
   String concertInfo;
   if (isMenuChanged) {
     rotaryEncoder.setBoundaries(0, 2, true);  // min value, max value(Number of options on menu), loop back(after 2 comes back to 0)
-    concertInfo = httpGetRequest_Concert();
     lcd.clear();
     lcd.setCursor(titlePosition, 0);
     lcd.print("Concert Info");
     lcd.setCursor(2, 1);
     lcd.print("Next Concert:");
-    lcd.setCursor(2, 2);
-    lcd.print(concertInfo.substring(0, 0 + lcdWidth + -2));
     lcd.setCursor(0, 3);
     lcd.print("> EXIT");
+    concertInfo = httpGetRequest_Concert();
+    lcd.setCursor(2, 2);
+    lcd.print(concertInfo.substring(0, 0 + lcdWidth + -2));
+
     MenuIndex = 2;
     isMenuChanged = false;
   }

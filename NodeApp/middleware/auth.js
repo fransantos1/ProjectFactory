@@ -10,7 +10,7 @@ module.exports.verifyAuth = async function (req, res, next) {
         }
         let result = await User.getUserByToken(token);
         if (result.status != 200) {
-            res.status(result.status).send(result.result);
+            res.status(401).send(result.result);
             return;
         }
          req.user = result.result;
@@ -42,7 +42,7 @@ module.exports.NodeAuth = async function (req, res, next) {
         }
         let result = await Node.getNodeByToken(token);
         if (result.status != 200) {
-            res.status(result.status).send(result.result);
+            res.status(401).send(result.result);
             return;
         }
         req.node = result.result.node;
