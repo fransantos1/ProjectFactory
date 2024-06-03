@@ -5,6 +5,7 @@ create table node (
     node_apiToken VARCHAR(255) not null,
     node_isEmergency boolean DEFAULT FALSE,
     node_isOnline boolean DEFAULT FALSE,
+    node_userToken VARCHAR(255) DEFAULT NULL,
     node_ip inet not null,
     primary key (node_id)
 );

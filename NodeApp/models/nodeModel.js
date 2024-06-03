@@ -17,18 +17,20 @@ function dbNodetoNode(dbnode)  {
     node.isEmergency = dbnode.node_isemergency;
     node.macaddress = dbnode.node_macaddress;
     node.isOnline = dbnode.node_isOnline;
+    node.userToken = dbnode.node_usertoken;
     return node;
 }
 
 class Node {
-    constructor(id, token, apiToken, ip,macaddress, isEmergency,isOnline) {
+    constructor(id, token, apiToken, ip,macaddress, isEmergency,isOnline, userToken) {
         this.id = id
         this.token = token
         this.apiToken = apiToken
         this.ip = ip
         this.macaddress = macaddress
         this.isEmergency = isEmergency
-        this.isOnline = isOnline
+        this.isOnline = isOnline,
+        this.userToken = userToken
     }
     export() {
     }
@@ -57,6 +59,54 @@ class Node {
             console.log(err);
             return { status: 500, result: err };
         }
+    }
+    static async getLastData(node){
+        try{
+            console.log(node);
+            let dbResult = await pool.query(`
+                    WITH ranked_data AS (
+                        SELECT
+                            data_id,
+                            data_value,
+                            data_dataType_id,
+                            data_time,
+                            data_node_id,
+                            ROW_NUMBER() OVER (PARTITION BY data_dataType_id ORDER BY data_time DESC) AS index
+                        FROM
+                            data
+                        where data_node_id =$1
+                    )
+                    SELECT
+                        data_value,
+                        dataType_name,
+                        data_time
+                    FROM
+                        ranked_data
+                    
+                        inner join datatype on datatype_id = data_dataType_id
+                        
+                    WHERE
+                        index = 1;`,[node.id]);
+            let dbvalues = dbResult.rows;
+            if (!dbvalues.length)
+                return {status:500};
+            let result={}
+            for(let value of dbvalues){
+                if(value.datatype_name == "temperature"){
+                    result.temperature = value.data_value;
+                }else{
+                    result.humidity = value.data_value;
+                }
+
+            }
+            console.log(result);
+            return{status: 200, result: result}
+        }catch(err){
+            console.log(err);
+            return { status: 500 };
+        }
+
+
     }
     static async saveConn(node,connections){
         try{
@@ -99,10 +149,7 @@ class Node {
         }
 
     }
-
-    
-    //! Experimental way to controll led
-    static async AmbientLed(macaddress, activate){
+    static async ResetNodeUser(macaddress){
         macaddress = utils.normalizeMAC(macaddress);
         let result = await this.getNodeByMAC(macaddress);
         if(result.status != 200){
@@ -111,7 +158,45 @@ class Node {
         let node = result.result.node;
         const data = {
             token: node.apiToken,
-            activate: activate
+            userToken: utils.genToken(15)
+        };
+        try{
+            result = await fetch('http://' + node.ip + ':' + nodeApi_port + '/reset', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(data)
+            });  
+            const responseBodyJson = await result.json();
+            if (result.status === 403) { //if its not possible
+            
+            return { status: result.status, result: { msg: responseBodyJson.msg } };
+            } else if(result.status != 200){
+                console.log(responseBodyJson);
+                return { status: 500};
+                // handle other status codes or successful response
+            
+            }
+            console.log(result.body);
+            let dbResult = await pool.query(`UPDATE node SET node_usertoken = $1 WHERE node_macaddress = $2;`,[data.userToken, macaddress]);
+            console.log(data.userToken);
+
+
+            return { status: 200 };
+
+            
+        }catch(err){
+            console.log(err);
+            return { status: 500};
+        }
+    }
+    
+    //! Experimental way to controll led
+    static async AmbientLed(node){
+        let result;
+        const data = {
+            token: node.apiToken
         };
         try{
             result = await fetch('http://' + node.ip + ':' + nodeApi_port + '/setLed', {
@@ -197,7 +282,38 @@ class Node {
         }
         */
     }
-    static async BlinkNode_Find(value, node){       
+    static async BlinkNode_Find(node){      
+        let result; 
+        const data = {
+            token: node.apiToken
+        };
+        try{
+            result = await fetch('http://' + node.ip + ':' + nodeApi_port + '/locate', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(data)
+            });  
+            const responseBodyJson = await result.json();
+            if (result.status === 403) { //if its not possible
+            return { status: result.status, result: { msg: responseBodyJson.msg } };
+            } else if(result.status != 200){
+                return { status: 500};
+                
+                // handle other status codes or successful response
+            
+            }
+            console.log(result.body);
+            return { status: 200 };
+
+            
+        }catch(err){
+            console.log(err);
+            return { status: 500};
+        }
+
+
     }
     static async GetEmergencyNode(){
 
@@ -368,6 +484,12 @@ class Node {
             return { status: 500};
         }
     }
+
+
+
+
+
+
     static async getNodeByToken(token) {
         try {
             let dbResult = await pool.query(`Select * from node where node_token = $1`,[token]);
@@ -396,6 +518,22 @@ class Node {
             return { status: 500};
         }
     }
+
+    static async getNodeByUser(token) {
+        try {
+            let dbResult = await pool.query(`Select * from node where node_usertoken= $1`,[token]);
+            let dbnode = dbResult.rows[0];
+            if(!dbnode){
+                return { status: 404, result: { msg: "no node Found" } };
+            }
+             
+            return { status: 200, result: { msg: "Found Node",node: dbNodetoNode(dbnode)} };
+        } catch (err) {
+            console.log(err);
+            return { status: 500};
+        }
+    }
+
     static async getNodeByMAC(macaddress) {
         try {
             let dbResult = await pool.query(`Select * from node where node_macaddress = $1`,[macaddress]);
@@ -411,44 +549,84 @@ class Node {
         }
     }
     static async updateNodeInfo(new_node, old_node){
-        //verify apiToken, ip
         let dbResult
+        //verify apiToken
         if(new_node.apiToken != old_node.apiToken){
             dbResult = await pool.query(`UPDATE node SET node_apiToken = $1 WHERE node_id = $2;`,[new_node.apiToken, old_node.id]);
         }
+        //verify ip
         if(new_node.ip != old_node.ip){
             dbResult = await pool.query(`UPDATE node SET node_ip = $1 WHERE node_id = $2;`,[new_node.ip, old_node.id]);
+        }
+        //verify userToken
+        if(!new_node.userToken)
+            return;
+        if(new_node.userToken != old_node.userToken){
+            dbResult = await pool.query(`UPDATE node SET node_usertoken = $1 WHERE node_id = $2;`,[new_node.userToken, old_node.id]);
         }
     }
     //Send desired interval between data saves
     static async AuthNode(new_node){
         try {
             //in node has: macaddress, ApiToken, ip, token.
+
+
             new_node.macaddress = utils.normalizeMAC(new_node.macaddress);
 
             if(!new_node.macaddress || !new_node.apiToken || !new_node.ip){
                 return { status: 400, result: { msg: "Bad Data"}};
             }
 
-            //find node by token
+            //find node by token 
             let result = await this.getNodeByToken(new_node.token);
             if(result.status != 404){
-                if(result.result.node.macaddress == new_node.macaddress){
-                    await this.updateNodeInfo(new_node, result.result.node);
-                    return { status: 200, result: { msg: "Authenthicated"}};
+                if(result.result.node.macaddress != new_node.macaddress)
+                    return { status: 401, result: { msg: "Access Denied"}};
+                
+                //the node has all the correct information so just return with authenthicated
+                //User Token
+
+                let response = {msg:"Authenthicated"}
+                if(result.result.node.userToken == null){
+                    let usrtoken = utils.genToken(15);
+                    while(1){
+                        let tempresult = await this.getNodeByUser(usrtoken);
+                        if(tempresult.status == 404)
+                            break;
+                        usrtoken = utils.genToken(15);    
+                    }
+                    new_node.userToken = usrtoken;
+                    response.userToken = usrtoken;
                 }
-                return { status: 401, result: { msg: "Access Denied"}};
+
+                await this.updateNodeInfo(new_node, result.result.node);
+                return { status: 200, result:response};
             }
+            let response = { msg: "Saved successfully"}
+
             result = await this.getNodeByMAC(new_node.macaddress);
             if(result.status != 200){
                 result = await this.RegisterNode(new_node);
                 if(result.status != 200){
                     return result;
                 }
-            }else{
-                await this.updateNodeInfo(new_node, result.result.node);
             }
-            let token = utils.genToken();
+            if(result.result.node.userToken == null){
+                let usrtoken = utils.genToken(15);
+                while(1){
+                    let tempresult = await this.getNodeByUser(usrtoken);
+                    if(tempresult.status == 404)
+                        break;
+                    usrtoken = utils.genToken(15);    
+                }
+                new_node.userToken = usrtoken;
+                response.userToken = usrtoken;
+            }
+            await this.updateNodeInfo(new_node, result.result.node);
+            let token = utils.genToken(62);
+            response.token = token;
+
+
             new_node.id = result.result.node.id;
             
             new_node.token = token;
@@ -457,7 +635,9 @@ class Node {
             if(result.status != 200){
                 return { status: 500, result: { msg: "error"}};
             }
-        return { status: 200, result: { msg: "Saved successfully",token:token} };
+
+
+        return { status: 200, result: response};
         } catch (err) {
             console.log(err);
             return { status: 500};

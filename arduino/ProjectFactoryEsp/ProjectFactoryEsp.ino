@@ -27,12 +27,17 @@
 #define ROTARY_ENCODER_STEPS 2
 #define APITOKEN_LEN 64
 
-// TODO LIGHTSHOW Function
-// TODO connection detection
+// TODO ORGANIZE CODE
+// TODO diiferent EMERGENCY CODES
 // TODO screen feedback when sending data to the api
+// TODO NFC AUTHENHICATION
+// TODO CORRECT MENU, when going back reset the menu itself to overwrite characters
+
+// TODO LIGHTSHOW Function
 // TODO timeout when the net is not available and try to connect every 5 s or smth
 // TODO error when connecting to the server and make the same timeout has the net
 // TODO HEARTBEAT TO API
+
 
 
 
@@ -47,9 +52,18 @@ const char* password = "7A41701C96";
 char apiToken[APITOKEN_LEN + 1];
 WebServer server(80);
 //DHT SENSOR
-bool isEmergency = false;
-bool isAuth = false; // auth with api
-bool isConn = false; //api available
+
+
+// FLAGS 
+
+
+bool isEmergency = false; // if the tent is in an emergency
+bool isAuth = false; // if the esp is authenthicated
+bool isConn = false; //if the esp is connected with wifi
+
+
+
+
 const char* filename = "/data.bin";
 DHT dht(DHTPIN, DHTTYPE);
 int lcdHeight = 4;
@@ -72,6 +86,11 @@ void setupDisplay() {
   lcd.init();
   lcd.backlight();
 }
+
+
+//
+// sync esp32 time with real time, so it can store sensor data and know its date/time without sending it to the api
+//
 
 unsigned long lastEpochUpdatedTime = 0;
 unsigned long epochTimerDelay = 10 * 60 * 1000;  //10 minutes
@@ -101,6 +120,7 @@ unsigned long getTime() {///////////////////////////////////////////////////////
   }
 }
 
+
 void setupWifi() {/////////////////////////////////////////////////////////////AFFECTED BY CONN
   WiFi.begin(ssid, password);
   lcd.clear();
@@ -125,29 +145,48 @@ void setupWifi() {/////////////////////////////////////////////////////////////A
   lcd.print("Connected WiFi_IP: ");
   lcd.setCursor(0, 1);
   lcd.print(WiFi.localIP());
-  server.on("/setRGB", HTTP_POST, LightShow);//RGB
-  server.on("/setLed", HTTP_POST, controlLed);//Ambient
-  //server.on("/setLed", HTTP_POST, controlLed);//other
   server.begin();
   delay(1000);
 }
 
 
+
+
+
+//
+// Sensor data LOGGING
+// 
+
+//easy to add more sensors
 struct SensorData {
   unsigned long timestamp;
   float humidity;
   float temperature;
 };
 unsigned long lastUpdateDataTime = 0;  // Variable to store the last time the temperature and humidity were updated
-int dataReadingDelay = 100;            // Delay between updates in miliseconds
+int originaldataReadingDelay = 100;  
+int dataReadingDelay = originaldataReadingDelay;            // Delay between updates in miliseconds
 int dataBufferIndex = 0;
 const int dataBufferSize = 10;
 SensorData sensorDataBuffer[dataBufferSize];
 
+int numberOfBuffersInSD = 5; //Number of Buffers saved in SD before sending
+
 float maxTemp = 31;
-void sensorDataController() {          /////////////////////////////////////////////////////////////AFFECTED BY CONN
+
+// Read sensor data and add it to a buffer
+void sensorDataController() {  
   unsigned long currentTime = millis();  // Get the current time
+
+
+
   if (currentTime - lastUpdateDataTime >= dataReadingDelay) {
+    if (!SD.begin()) {
+      //DEBUGGER TO KEEP TRACK OF BUFFER
+      Serial.print("Track Buffer: ");
+      Serial.println(dataBufferIndex);
+    }
+
     lastUpdateDataTime = currentTime;
     sensorDataBuffer[dataBufferIndex].humidity = dht.readHumidity();
     sensorDataBuffer[dataBufferIndex].temperature = dht.readTemperature();
@@ -156,14 +195,66 @@ void sensorDataController() {          /////////////////////////////////////////
     if (dataBufferIndex >= dataBufferSize) {
       dataBufferIndex = 0;
       if (!SD.begin()) {
-        //Serial.println("SD card not available");
+        //change dataReadingDelay to change the sensorDataBuffer[] instead of the information of the SDCard, but at the same interval
+        dataReadingDelay = originaldataReadingDelay*dataBufferSize*numberOfBuffersInSD;//sends the data at the same interval independentally if the sdCard is mounted or not
+        sendSensorDataFromBuffer();
+        Serial.println("SD card not available");
         return;
       }
+      dataReadingDelay = originaldataReadingDelay;
+      //if SDCard 
       writeSensorDataToFile();
     }
   }
 }
-void sendSensorData() {
+
+// Write from the buffer to the SDCard
+
+void writeSensorDataToFile() {
+  static size_t lastSize;
+  size_t maxSDFileSize = sizeof(struct SensorData) * dataBufferSize * numberOfBuffersInSD;
+  File file = SD.open(filename, FILE_APPEND);
+  if (!file) {
+    Serial.println("Failed to open file for writing.");
+    return;
+  }
+  for (int i = 0; i < dataBufferSize; i++) {
+    Serial.print(String(file.write((uint8_t*)&sensorDataBuffer[i], sizeof(SensorData))) + " | ");
+  }
+  Serial.println("");
+  size_t fileSize = file.size();
+  file.close();
+  Serial.println(fileSize);
+  if (lastSize == fileSize) {
+    //SD.remove(filename);
+  }
+  if (fileSize >= maxSDFileSize) {
+    sendSensorDataFromSD();
+  }
+  lastSize = fileSize;
+}
+// Remove the data from de sensorDataBuffer[] and send it to the API
+void sendSensorDataFromBuffer() {
+  char* payload = new char[sizeof(SensorData) * dataBufferSize*10];
+  strcpy(payload, "[");
+  for(int i = 0; i < dataBufferSize; i++) {
+    SensorData data = sensorDataBuffer[i];
+    char entry[sizeof(SensorData) * 10];
+    sprintf(entry, "{\"timestamp\": %lu, \"humidity\": %.2f, \"temperature\": %.2f}", data.timestamp, data.humidity, data.temperature);
+    strcat(payload, entry);
+    if (i < dataBufferSize - 1) {
+      strcat(payload, ",");
+    }
+  }
+  strcat(payload, "]");
+  sendData(payload);
+  delete[] payload;
+}
+
+
+
+// Remove the data from de SD and send it to the API
+void sendSensorDataFromSD() {
   File file = SD.open(filename, FILE_READ);
   if (!file) {
     Serial.println("Failed to open file for reading.");
@@ -203,30 +294,10 @@ void sendSensorData() {
   }
   Serial.println("It Took: " + String((millis() - stopwatch)) + " ms");
 }
-void writeSensorDataToFile() {
-  static size_t lastSize;
-  int numberOfBuffersInSD = 5;
-  size_t maxSDFileSize = sizeof(struct SensorData) * dataBufferSize * numberOfBuffersInSD;
-  File file = SD.open(filename, FILE_APPEND);
-  if (!file) {
-    Serial.println("Failed to open file for writing.");
-    return;
-  }
-  for (int i = 0; i < dataBufferSize; i++) {
-    Serial.print(String(file.write((uint8_t*)&sensorDataBuffer[i], sizeof(SensorData))) + " | ");
-  }
-  Serial.println("");
-  size_t fileSize = file.size();
-  file.close();
-  Serial.println(fileSize);
-  if (lastSize == fileSize) {
-    //SD.remove(filename);
-  }
-  if (fileSize >= maxSDFileSize) {
-    sendSensorData();
-  }
-  lastSize = fileSize;
-}
+
+//
+//---------------------------------SDCARD SETUP
+//
 void setupSDCard() {
   if (!SD.begin()) {
     Serial.println("Card Mount Failed");
@@ -250,6 +321,7 @@ void setupSDCard() {
   uint64_t cardSize = SD.cardSize() / (1024 * 1024);
   Serial.printf("SD Card Size: %lluMB\n", cardSize);
 }
+
 //
 //---------------------------CONNECTION
 //
@@ -274,6 +346,9 @@ void connectionHandler(){
 //
 //---------------------------AUTHENTHICATION---------------------------------------------------------------------
 //
+
+//Saves the api token to the EEPROM
+
 void saveTokenEEPROM(const char* token) {
   int length = strlen(token);
   for (int i = 0; i < length; i++) {
@@ -293,6 +368,7 @@ String readTokenEEPROM() {
   }
   return token;
 }
+//GENERATE A TOKEN TO THE API TO TALK TO THE ESP
 void genApiToken() {
   static const char characters[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
   static const int charactersLength = strlen(characters);
@@ -301,9 +377,9 @@ void genApiToken() {
   }
   apiToken[APITOKEN_LEN] = '\0';
 }
-String serverAPICheckToken() {/////////////////////////////////////////////////////////////AFFECTED BY CONN
+String serverAPICheckToken() {
   HTTPClient http;
-  genApiToken();
+  genApiToken();//GEN A TOKEN 
   http.begin((serverName + "api/node/authenticate").c_str());  //THIS REQUEST WILL EITHER RETURN THE NODE TOKEN OR NOTHING
   http.addHeader("Content-Type", "application/json");
   http.addHeader("macaddress", WiFi.macAddress());  //send Macaddress
@@ -324,6 +400,7 @@ String serverAPICheckToken() {//////////////////////////////////////////////////
       Serial.println(error.c_str());
       return "Error";
     }
+    //VERIFY THE USERTOKEN and if true than send a signal to the arduino
     const char* token = doc["result"]["token"];
     if (String(token) == "") {
       Serial.println("CorrectToken");
@@ -331,6 +408,17 @@ String serverAPICheckToken() {//////////////////////////////////////////////////
       saveTokenEEPROM(token);
     }
     Serial.println(String(token));
+    const char* userToken = doc["result"]["userToken"];
+    if (String(userToken) == "") {
+      Serial.println("Has a Owner");
+    } else {
+      //handle token
+      Serial.print('\0');
+      Serial.print("NFC");
+      Serial.print('\0');
+      Serial.print(userToken);
+      Serial.print('\0');
+    }
     isAuth = true;
     isConn = true;
     return String(token);
@@ -369,15 +457,84 @@ void resetLed(){
 }
 
 //
-//---------------------------------------NodeAPI---------------------------------------
+//---------------------------------------ESPAPI---------------------------------------
 //
 
-
-void locate() {
+void setupAPI(){
+  server.on("/setRGB", HTTP_POST, LightShowAPI);//RGB
+  server.on("/setLed", HTTP_POST, controlLedAPI);//Ambient
+  server.on("/locate", HTTP_POST, locateAPI);
+  server.on("/reset", HTTP_POST, ResetUserAPI);
 }
 
+
+
+bool isLocate = false;
+
+void locateAPI() {
+  String body = server.arg("plain");
+  JsonDocument doc;
+  DeserializationError error = deserializeJson(doc, body);
+  if(isEmergency){
+    server.send(403, "application/json", "{ \"msg\": \"Node in Emergency Mode\" }");
+    return;
+  }
+  if (error) {
+    Serial.print("Failed to parse JSON: ");
+    Serial.println(error.c_str());
+  }
+  String token = doc["token"];
+  if (token.equals("null") || !token.equals(String(apiToken))) {
+    server.send(401, "application/json", "{ \"msg\": \"Not Authorized\" }");
+    return;
+  }
+  Serial.println("LOcate");
+  isLocate = !isLocate; 
+  Serial.println(isLocate);
+  if(!isLocate){
+    resetLed();
+  }
+
+  // Respond to the client
+  server.send(200, "application/json", "{}");
+
+}
+void ResetUserAPI() {
+  // Send a respons
+  //verifications needed
+  //needs TokenAPI
+  String body = server.arg("plain");
+  JsonDocument doc;
+  DeserializationError error = deserializeJson(doc, body);
+  if (error) {
+    Serial.print("Failed to parse JSON: ");
+    Serial.println(error.c_str());
+  }
+  String token = doc["token"];
+  if (token.equals("null") || !token.equals(String(apiToken))) {
+    server.send(401, "application/json", "{ \"msg\": \"Not Authorized\" }");
+    return;
+  }
+  const char* userToken = doc["userToken"];
+  if (String(userToken) != "") {
+    //handle token
+    Serial.print('\0');
+    Serial.print("NFC");
+    Serial.print('\0');
+    Serial.print(userToken);
+    Serial.print('\0');
+  }
+  // Respond to the client
+  server.send(200, "application/json", "{}");
+}
+
+
+
+
+
+
 //Controll RGB
-void LightShow() {
+void LightShowAPI() {
   // Send a respons
   //verifications needed
   //needs TokenAPI
@@ -413,10 +570,9 @@ void LightShow() {
   
 }
 
-
+bool ambientLight = false;
 //Controll Ambient light
-void controlLed() {
-  static bool activate;
+void controlLedAPI() {
   String body = server.arg("plain");
   JsonDocument doc;
   DeserializationError error = deserializeJson(doc, body);
@@ -429,11 +585,11 @@ void controlLed() {
     server.send(401, "application/json", "{ \"msg\": \"Not Authorized\" }");
     return;
   }
-  activate = doc["activate"];
-  if (activate) {
-    digitalWrite(PIN_LED, HIGH);
-  } else {
+  ambientLight = !ambientLight; 
+  if(!ambientLight){
     digitalWrite(PIN_LED, LOW);
+  }else{
+    digitalWrite(PIN_LED, HIGH);
   }
   // Respond to the client
   server.send(200, "application/json", "{}");
@@ -446,7 +602,7 @@ bool isMenuChanged = true;
 
 bool emergencyChange = false;
 ///////////////////////////////////////////////////////////////////////////NEEDS AUTH
-void emergencyRequeste(bool Emergency){/////////////////////////////////////////////////////////////AFFECTED BY CONN
+void emergencyRequest(bool Emergency){/////////////////////////////////////////////////////////////AFFECTED BY CONN
   if(!isAuth)
     return;
   HTTPClient http;
@@ -526,7 +682,7 @@ bool emergencyHandler(){
     if(!isEmergency)
       analogWrite(PIN_BUZZER, 0);
     resetLed();
-    emergencyRequeste(isEmergency);
+    emergencyRequest(isEmergency);
   }
   if(isEmergency){
       Emergency();
@@ -535,38 +691,83 @@ bool emergencyHandler(){
   return false;
 }
 //
+//----------------------------LocateNodeHandler--------------------
+//
+void locateController(){
+  if(isEmergency || !isLocate){
+    return;
+  }
+
+  static bool isOn = false;
+  int interval = 500;//ms
+  static unsigned long button_time;  
+  static unsigned long last_button_time; 
+  button_time = millis();
+  if (button_time - last_button_time > interval)
+  {
+    last_button_time = button_time;
+    if(isOn){
+      ledController(255,255,0); //yellow
+      isOn = false;
+    }else{
+      isOn=true;
+      ledController(0,0,0);
+    }
+      
+  }
+
+
+}
+
+//
 //-----------------------------SETUP/LOOP------------------------------
 //
+
+
 void setup() {
   pinMode(PIN_LED, OUTPUT);
   EEPROM.begin(EEPROM_SIZE);
   Serial.begin(115200);
   setupDisplay();
-  pinMode(PIN_RED, OUTPUT);
-  pinMode(PIN_GREEN, OUTPUT);
-  pinMode(PIN_BLUE, OUTPUT);
   setupWifi();
+  setupAPI();
   authenticateWithServer();
   configTime(0, 0, ntpServer);
   setupDHTsensor();
   setupSDCard();
   setupRotaryControl();
+
+  pinMode(PIN_RED, OUTPUT);
+  pinMode(PIN_GREEN, OUTPUT);
+  pinMode(PIN_BLUE, OUTPUT);
   pinMode(PIN_BTN_EMERGENCY, INPUT);
   pinMode(PIN_BUZZER, OUTPUT);
+
   attachInterrupt(PIN_BTN_EMERGENCY, emergencyInterrupt, RISING);
 }
+long max_delay = 0;
 void loop() {
-  connectionHandler();
+  unsigned long stopwatch = millis();
 
+  
+  connectionHandler();
   ControlMenu();
   server.handleClient();/////////////////////////////////////////////////////////////AFFECTED BY CONN
+  locateController();
   if(emergencyHandler()){ 
     return;
   }
+ 
   sensorDataController();
+  if((millis() - stopwatch) > max_delay){
+    max_delay = (millis() - stopwatch);
+    Serial.println("It Took: " + String(max_delay) + " ms");
+  }
+   
+
 }
 //
-//----------------------------------------------------GENERAL API CALLS
+//----------------------------------------------------GENERAL HTTP REQUESTS
 //
 String httpGetRequest_Concert() {/////////////////////////////////////////////////////////////AFFECTED BY CONN
   if(!isConn)
@@ -689,7 +890,6 @@ void ControlMenu() {
 void controlMainMenu() {
   if (isMenuChanged) {                        //INITIALIZATION
     rotaryEncoder.setBoundaries(0, 2, true);  // min value, max value(Number of options on menu), loop back(after 2 comes back to 0)
-
     lcd.clear();
     lcd.setCursor(titlePosition, 0);  //Set cursor to character 2 on line 0
     lcd.print("MENU");

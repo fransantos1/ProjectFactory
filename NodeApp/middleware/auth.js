@@ -32,6 +32,18 @@ module.exports.ApiKey = async function (req, res, next) {
     }
     next()
 } 
+module.exports.AdminKey = async function (req, res, next) {
+    let AdminKey = req.headers.adminkey;
+    if (!AdminKey) {
+        res.status(401).send({msg: "Not Authorized" });
+        return;
+    }
+    if(AdminKey != "IEIJjGZz7zmzkjV"){
+        res.status(401).send({msg: "Not Authorized" });
+        return;
+    }
+    next()
+} 
 //verify the node token
 module.exports.NodeAuth = async function (req, res, next) {
     try {
@@ -41,6 +53,25 @@ module.exports.NodeAuth = async function (req, res, next) {
             return;
         }
         let result = await Node.getNodeByToken(token);
+        if (result.status != 200) {
+            res.status(401).send(result.result);
+            return;
+        }
+        req.node = result.result.node;
+        next()
+    } catch (err) {
+        console.log(err);
+        res.status(500).send(err);
+    }
+} 
+module.exports.UserToken = async function (req, res, next) {
+    try {
+        let token = req.headers.usertoken;
+        if (!token) {
+            res.status(401).send({msg: "No Token Given" });
+            return;
+        }
+        let result = await Node.getNodeByUser(token);
         if (result.status != 200) {
             res.status(401).send(result.result);
             return;

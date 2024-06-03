@@ -1,0 +1,162 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/main"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    tools:context=".MainActivity"
+    android:background="#233345"
+    android:orientation="vertical">
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:layout_width="369dp"
+        android:layout_height="753dp"
+        android:layout_marginStart="25dp"
+        android:layout_marginTop="16dp"
+        android:layout_marginEnd="25dp"
+        android:background="@drawable/background_border"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <TextView
+            android:id="@+id/titulo_iotent"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="68dp"
+            android:layout_marginTop="28dp"
+            android:fontFamily="@font/alatsi"
+            android:text="IoTent- Sensors"
+            android:textColor="#EFEFEF"
+            android:textSize="34sp"
+            android:textStyle="bold"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <TextView
+            android:id="@+id/titulo_temp"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="56dp"
+            android:layout_marginTop="96dp"
+            android:fontFamily="@font/alatsi"
+            android:text="Temperatura"
+            android:textColor="#EFEFEF"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@+id/titulo_iotent" />
+
+        <TextView
+            android:id="@+id/value_temp"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:layout_marginEnd="220dp"
+            android:fontFamily="@font/alatsi"
+            android:text=""
+            android:textAlignment="center"
+            android:textColor="#EFEFEF"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toBottomOf="@+id/titulo_temp" />
+
+        <TextView
+            android:id="@+id/titulo_hum"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="28dp"
+            android:layout_marginTop="96dp"
+            android:layout_marginEnd="64dp"
+            android:fontFamily="@font/alatsi"
+            android:text="Humidade"
+            android:textColor="#EFEFEF"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toEndOf="@+id/titulo_temp"
+            app:layout_constraintTop_toBottomOf="@+id/titulo_iotent" />
+
+        <TextView
+            android:id="@+id/value_hum"
+            android:layout_width="0dp"
+            android:layout_height="26dp"
+            android:layout_marginStart="216dp"
+            android:layout_marginTop="12dp"
+            android:fontFamily="@font/alatsi"
+            android:text=""
+            android:textAlignment="center"
+            android:textColor="#EFEFEF"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@+id/titulo_hum" />
+
+        <TextView
+            android:id="@+id/reset_titulo"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="116dp"
+            android:layout_marginTop="110dp"
+            android:fontFamily="@font/alatsi"
+            android:text="Reset Token"
+            android:textColor="#EFEFEF"
+            android:textSize="28sp"
+            android:textStyle="bold"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@+id/btn_location" />
+
+        <Button
+            android:id="@+id/btn_location"
+            android:layout_width="55dp"
+            android:layout_height="60dp"
+            android:layout_marginStart="156dp"
+            android:layout_marginTop="24dp"
+            android:backgroundTint="#FFFFFF"
+            android:text="📍"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@+id/reset_titulo" />
+
+        <TextView
+            android:id="@+id/reset_titulo"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="108dp"
+            android:layout_marginTop="68dp"
+            android:fontFamily="@font/alatsi"
+            android:text="Find My Tent"
+            android:textColor="#EFEFEF"
+            android:textSize="28sp"
+            android:textStyle="bold"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@+id/titulo_temp" />
+
+        <Button
+            android:id="@+id/btn_token"
+            android:layout_width="61dp"
+            android:layout_height="48dp"
+            android:layout_marginStart="156dp"
+            android:layout_marginBottom="128dp"
+            android:backgroundTint="#FFFFFF"
+            android:text="↻"
+            android:textColor="#000000"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toStartOf="parent" />
+
+        <Button
+            android:id="@+id/btn_light"
+            android:layout_width="55dp"
+            android:layout_height="60dp"
+            android:layout_marginStart="156dp"
+            android:layout_marginTop="36dp"
+            android:backgroundTint="#FFFFFF"
+            android:text="💡"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@+id/btn_location" />
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
+</androidx.constraintlayout.widget.ConstraintLayout>
