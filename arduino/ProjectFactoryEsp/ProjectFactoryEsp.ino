@@ -43,12 +43,12 @@
 
 #define API_KEY "134a8fb6-3824-497a-a23c-1b89abe03a8a"
 
-String serverName = "http://192.168.1.72:8080/";
+String serverName = "http://192.168.43.47:8080/";
 
-//const char* ssid = "esp32wifi";
-//const char* password = "espfrancisco";
-const char* ssid = "MEO-52EE71";
-const char* password = "7A41701C96";
+const char* ssid = "esp32wifi";
+const char* password = "espfrancisco";
+//const char* ssid = "MEO-52EE71";
+//const char* password = "7A41701C96";
 char apiToken[APITOKEN_LEN + 1];
 WebServer server(80);
 //DHT SENSOR
@@ -164,7 +164,7 @@ struct SensorData {
   float temperature;
 };
 unsigned long lastUpdateDataTime = 0;  // Variable to store the last time the temperature and humidity were updated
-int originaldataReadingDelay = 100;  
+int originaldataReadingDelay = 1000;  
 int dataReadingDelay = originaldataReadingDelay;            // Delay between updates in miliseconds
 int dataBufferIndex = 0;
 const int dataBufferSize = 10;
@@ -196,7 +196,7 @@ void sensorDataController() {
       dataBufferIndex = 0;
       if (!SD.begin()) {
         //change dataReadingDelay to change the sensorDataBuffer[] instead of the information of the SDCard, but at the same interval
-        dataReadingDelay = originaldataReadingDelay*dataBufferSize*numberOfBuffersInSD;//sends the data at the same interval independentally if the sdCard is mounted or not
+        dataReadingDelay = originaldataReadingDelay*numberOfBuffersInSD;//sends the data at the same interval independentally if the sdCard is mounted or not
         sendSensorDataFromBuffer();
         Serial.println("SD card not available");
         return;
@@ -808,8 +808,11 @@ void sendData(char* payload) {//////////////////////////////////////////////////
   lcd.clear();
   lcd.setCursor(0, 1);
   lcd.print("Sending");
-  if(!isAuth)
+  if(!isAuth){
+    lcd.clear();
+    isMenuChanged = true;
     return;
+  }
   HTTPClient http;
 
   // Specify content-type header

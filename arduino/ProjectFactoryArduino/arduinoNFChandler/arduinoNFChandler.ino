@@ -107,7 +107,7 @@ void NFCHandler(){
           0x00, 0x00, 0x00, 0x00,
           0x00, 0x00, 0x00, 0x00
         };
-  success = nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLength, 150);
+  success = nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLength);
   if (success)  
   {
     // Display some basic information about the card
