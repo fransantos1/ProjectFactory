@@ -1,25 +1,6 @@
-const User = require("../models/usersModel");
 const Node = require("../models/nodeModel");
 const refreshPer =  1440e3; // 1440e3 milliseconds = 1 hour
-module.exports.verifyAuth = async function (req, res, next) {
-    try {
-        let token = req.session.token;
-        if (!token) {
-            res.status(401).send({msg: "Please log in." });
-            return;
-        }
-        let result = await User.getUserByToken(token);
-        if (result.status != 200) {
-            res.status(401).send(result.result);
-            return;
-        }
-         req.user = result.result;
-        next()
-    } catch (err) {
-        console.log(err);
-        res.status(500).send(err);
-    }
-} 
+
 module.exports.ApiKey = async function (req, res, next) {
     let APIKey = req.headers.api_key;
     if (!APIKey) {

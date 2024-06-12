@@ -10,6 +10,7 @@ using UnityEngine.iOS;
 using static UnityEngine.GraphicsBuffer;
 using Unity.VisualScripting;
 using System.Linq;
+using UnityEditor.Experimental.GraphView;
 
 public class NodeScript : MonoBehaviour
 {
@@ -88,13 +89,12 @@ public class NodeScript : MonoBehaviour
         // Initialize variables
         Vector2 totalForce = Vector2.zero;
         Vector2 thisPosition = transform.position;
-
-        foreach (var node in allNodes)
+        for(int i = 0 ; i < allNodes.Count; i++) 
         {
-            Vector2 nodePos = node.transform.position;
+            Vector2 nodePos = allNodes[i].transform.position;
             Vector2 direction = (nodePos - thisPosition).normalized;
             float distance = Vector2.Distance(transform.position, nodePos);
-            if (node.gameObject == gameObject)
+            if (allNodes[i].gameObject == gameObject)
                 continue;
 
             // Repulsive Force (Node-Node)
@@ -105,40 +105,18 @@ public class NodeScript : MonoBehaviour
             totalForce += repulsionForce;
 
             // Attractive Force (Connections)
-            if (connections.Contains(node))
+            if (connections.Contains(allNodes[i]))
             {
                 float attraction = atractionForce * (distance - desiredDistance);
                 Vector2 attractionForce = attraction * direction.normalized;
                 totalForce += attractionForce;
             }
-        }
 
+
+        }
         rb.AddForce(totalForce, ForceMode.VelocityChange);
         // rb.velocity = totalForce;
     }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
     public void InitiateLine()
     {
         print("initiating line");
@@ -167,13 +145,14 @@ public class NodeScript : MonoBehaviour
     {
         if (lineRenderer == null)
             return;
-        foreach ( var dicLineRenderer in lineRenderers)
+        for(int i = 0; i< lineRenderers.Count; i++)
         {
-            LineRenderer lineRenderer = dicLineRenderer.Value;
+            var item = lineRenderers.ElementAt(i);
+            LineRenderer lineRenderer = item.Value;
 
             lineRenderer.SetPosition(0, transform.position);
 
-            Vector3 vector3 = dicLineRenderer.Key.transform.position;
+            Vector3 vector3 = item.Key.transform.position;
             vector3.z = -2;
             lineRenderer.SetPosition(1, vector3);
         }

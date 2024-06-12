@@ -87,7 +87,6 @@ def gen_ip():
 
 
 n_data = 120
-
 n_nodes = 40
 height = 10  
 width = 10

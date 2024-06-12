@@ -26,9 +26,9 @@ import java.nio.charset.StandardCharsets;
 
 public class NfcActivity extends AppCompatActivity {
 
-    Button btn_refresh_NFC;
 @Override
         protected void onCreate(Bundle savedInstanceState){
+            Log.d("activity", "Activity Created");
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_nfc);
 
@@ -65,6 +65,7 @@ public class NfcActivity extends AppCompatActivity {
                     editor.apply();
                     Intent switchActivity = new Intent(this, MainActivity.class);
                     startActivity(switchActivity);
+                    finish();
                 } else {
                     Log.d("NFC", "Failed to read block");
                 }

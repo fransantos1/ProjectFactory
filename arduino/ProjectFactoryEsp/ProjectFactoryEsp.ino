@@ -47,8 +47,6 @@ String serverName = "http://192.168.43.47:8080/";
 
 const char* ssid = "esp32wifi";
 const char* password = "espfrancisco";
-//const char* ssid = "MEO-52EE71";
-//const char* password = "7A41701C96";
 char apiToken[APITOKEN_LEN + 1];
 WebServer server(80);
 //DHT SENSOR

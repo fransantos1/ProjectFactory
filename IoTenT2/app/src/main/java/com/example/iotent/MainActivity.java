@@ -30,7 +30,7 @@ public class MainActivity extends AppCompatActivity {
     private Handler handler;
     TextView value_temp, value_hum;
     String token;
-    String ip = "http://192.168.1.72:8080";
+    String ip = "http://192.168.43.47:8080";
     private OkHttpClient client = new OkHttpClient();
     public static final MediaType JSON = MediaType.get("application/json; charset=utf-8");
 
@@ -43,6 +43,7 @@ public class MainActivity extends AppCompatActivity {
             Log.d("DEBUG: ","not TOken");
             Intent switchActivity = new Intent(this, NfcActivity.class);
             startActivity(switchActivity);
+            finish();
         }else{
             Log.d("DEBUG: ",token);
         }
@@ -78,11 +79,20 @@ public class MainActivity extends AppCompatActivity {
                     saveToken(null);
                     Intent switchActivity = new Intent(MainActivity.this, NfcActivity.class);
                     startActivity(switchActivity);
+
+                    finish();
                 }
             });
         btnLight.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
+                if(token == null){
+                    saveToken(null);
+                    Intent switchActivity = new Intent(MainActivity.this, NfcActivity.class);
+                    startActivity(switchActivity);
+                    finish();
+                }
+
                 TurnLight();
             }
         });
@@ -90,6 +100,12 @@ public class MainActivity extends AppCompatActivity {
         btnlocation.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
+                if(token == null){
+                    saveToken(null);
+                    Intent switchActivity = new Intent(MainActivity.this, NfcActivity.class);
+                    startActivity(switchActivity);
+                    finish();
+                }
                 FindNode();
             }
         });
@@ -108,12 +124,20 @@ public class MainActivity extends AppCompatActivity {
     };
 
     private void GetData() {
+
         final String api = ip+"/api/node/GetData"; // insert API IP
         new Thread(new Runnable() {
             @Override
             public void run() {
                 try {
                     OkHttpClient client = new OkHttpClient();
+                    if(token == null){
+                        saveToken(null);
+                        Intent switchActivity = new Intent(MainActivity.this, NfcActivity.class);
+                        startActivity(switchActivity);
+                        finish();
+                        return;
+                    }
                     Request request = new Request.Builder()
                             .url(api)
                             .addHeader("UserToken", token)
@@ -128,6 +152,7 @@ public class MainActivity extends AppCompatActivity {
                         saveToken(null);
                         Intent switchActivity = new Intent(MainActivity.this, NfcActivity.class);
                         startActivity(switchActivity);
+                        finish();
                         return;
                     }
                     JSONObject jsonObject = new JSONObject(_response);
@@ -169,6 +194,7 @@ public class MainActivity extends AppCompatActivity {
                         saveToken(null);
                         Intent switchActivity = new Intent(MainActivity.this, NfcActivity.class);
                         startActivity(switchActivity);
+                        finish();
                         return;
                     }
                     final String _response = response.body().string();
@@ -203,6 +229,7 @@ public class MainActivity extends AppCompatActivity {
                         saveToken(null);
                         Intent switchActivity = new Intent(MainActivity.this, NfcActivity.class);
                         startActivity(switchActivity);
+                        finish();
                         return;
                     }
                 } catch (IOException e) {

@@ -12,9 +12,6 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-const usersRouter = require("./routes/usersRoutes");
-app.use("/api/users",usersRouter);
-
 const concertRouter = require("./routes/concertRoutes");
 app.use("/api/concerts",concertRouter);
 
